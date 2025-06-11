@@ -1,0 +1,97 @@
+
+
+# --------------------------------------------------------------------------- #
+#                        Dreamer‑LTC configuration file                       #
+# Every top‑level key defines a named preset that can be selected from the
+# command line via  --configs <block1> <block2> ...   Later blocks override
+# earlier ones (just like the official Dreamer implementation).
+# --------------------------------------------------------------------------- #
+
+base:
+  # Replay / batching
+  batch_size:        50          # sequences per learner step
+  seq_len:           50          # timesteps per sequence
+  train_ratio:       32          # gradient steps per real env step
+
+  # World‑model
+  deter_dim:         256
+  stoch_dim:         32
+  lr_model:          6e-4
+  free_nats:         1.5
+  kl_beta:           0.1
+
+  # Imagination & actor‑critic
+  imag_horizon:      15
+  lr_actor:          8e-5
+  lr_critic:         8e-5
+  discount:          0.99
+  lambda_:           0.95
+  tau_target:        0.01        # EMA for target critic
+  entropy_scale:     0.01
+
+  # Optimisers
+  grad_clip:         100.0
+
+  # Logging / checkpoint
+  log_every:         100         # learner steps
+  save_every:        5000        # learner steps
+
+# --------------------------------------------------------------------------- #
+# Debug: tiny network + tiny batch for quick sanity checks (learns nothing)   #
+# --------------------------------------------------------------------------- #
+debug:
+  batch_size:        4
+  seq_len:           16
+  deter_dim:         64
+  stoch_dim:         8
+  imag_horizon:      5
+  train_ratio:       1
+  log_every:         10
+  save_every:        1000
+
+# --------------------------------------------------------------------------- #
+# CartPole‑v1 / low‑dim control tasks                                         #
+# --------------------------------------------------------------------------- #
+cartpole:
+  env_id:            CartPole-v1
+  action_discrete:   true
+  batch_size:        32
+  seq_len:           32
+  deter_dim:         128
+  stoch_dim:         16
+  imag_horizon:      10
+  lr_model:          4e-4
+  lr_actor:          1e-4
+  lr_critic:         1e-4
+
+# --------------------------------------------------------------------------- #
+# Atari (84×84 grayscale)                                                     #
+# --------------------------------------------------------------------------- #
+atari:
+  env_id:            atari_pong
+  frame_stack:       4
+  action_discrete:   true
+  encoder_channels:  [32, 64, 128, 256]
+  deter_dim:         512
+  stoch_dim:         64
+  batch_size:        16
+  seq_len:           64
+  imag_horizon:      15
+  lr_model:          6e-4
+  lr_actor:          8e-5
+  lr_critic:         8e-5
+
+# --------------------------------------------------------------------------- #
+# MuJoCo / Brax continuous control                                            #
+# --------------------------------------------------------------------------- #
+mujoco:
+  env_id:            halfcheetah
+  action_discrete:   false
+  batch_size:        32
+  seq_len:           50
+  deter_dim:         256
+  stoch_dim:         32
+  imag_horizon:      20
+  lr_actor:          5e-5
+  lr_critic:         5e-5
+  entropy_scale:     0.003
