@@ -86,3 +86,22 @@ class DreamerModel(nn.Module):
         obs_pred = self.obs_decoder(feat)
         rew_pred = self.reward_decoder(feat)
         return priors, posts, obs_pred, rew_pred, feat
+
+    def init_state(self, batch_size: int = 1, device: torch.device | None = None):
+        """Return zero-initialised deterministic and stochastic states."""
+        device = device or next(self.parameters()).device
+        h = torch.zeros(batch_size, self.rssm.deter_dim, device=device)
+        z = torch.zeros(batch_size, self.rssm.stoch_dim, device=device)
+        return h, z
+
+    def step(self, obs: torch.Tensor, act: torch.Tensor,
+             h: torch.Tensor, z: torch.Tensor):
+        """Single RSSM update used during environment interaction."""
+        obs_emb = self.encoder(obs)
+        x = torch.cat([act, z], -1)
+        h = self.rssm.ltc(x, h)
+        stats = self.rssm.post(torch.cat([h, obs_emb], -1))
+        post = self.rssm._dist(stats)
+        z = post.rsample()
+        feat = torch.cat([h, z], -1)
+        return h, z, feat
