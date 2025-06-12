@@ -98,7 +98,7 @@ while step < 1_000_000:
         prev_act.zero_()
 
     # ----- learner updates ----- #
-    if replay.ready(cfg["batch_size"]):
+    if replay.ready(cfg["batch_size"], cfg["seq_len"]):
         for _ in range(cfg["train_ratio"]):
             batch = replay.sample(cfg["batch_size"], cfg["seq_len"])
             metrics = learner.step(batch)

@@ -153,7 +153,7 @@ class DreamerLearner:
 
         # ---------------- Actor update ---------------- #
         act_dist = self.actor.dist(feat_img[:-1].detach())
-        action = act_dist.rsample()
+        action = act_dist.rsample() if getattr(act_dist, "has_rsample", False) else act_dist.sample()
         log_prob = act_dist.log_prob(action)
         if log_prob.ndim > 2:  # continuous multi‑dim
             log_prob = log_prob.sum(-1)
