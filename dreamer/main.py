@@ -70,22 +70,35 @@ learner = DreamerLearner(
 # 4.  Training loop
 # ------------------------------------------------------------------- #
 obs, _ = env.reset()
+h, z = wm.init_state(batch_size=1, device=device)
+prev_act = torch.zeros(1, act_dim, device=device)
 episode_return = 0; step = 0
 while step < 1_000_000:
     # ----- collect real step ----- #
-    feat = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
+    obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
+    h, z, feat = wm.step(obs_t, prev_act, h, z)
     action, _, _ = actor(feat, deterministic=False)
-    act_np = action.squeeze(0).cpu().numpy()
+    if cfg["action_discrete"]:
+        act_idx = int(action.item())
+        act_np = act_idx
+        prev_act = torch.zeros(1, act_dim, device=device)
+        prev_act[0, act_idx] = 1.0
+    else:
+        act_np = action.squeeze(0).cpu().numpy()
+        prev_act = action.detach()
+
     next_obs, reward, done, truncated, _ = env.step(act_np)
-    replay.add(obs, act_np, reward, done)
+    replay.add(obs, prev_act.squeeze(0).cpu().numpy(), reward, done)
     obs, episode_return = (next_obs, episode_return + reward)
 
     if done or truncated:
         print(f"Episode return {episode_return:.1f}")
         obs, _ = env.reset(); episode_return = 0
+        h, z = wm.init_state(batch_size=1, device=device)
+        prev_act.zero_()
 
     # ----- learner updates ----- #
-    if replay.ready(cfg["batch_size"]):
+    if replay.ready(cfg["batch_size"], cfg["seq_len"]):
         for _ in range(cfg["train_ratio"]):
             batch = replay.sample(cfg["batch_size"], cfg["seq_len"])
             metrics = learner.step(batch)

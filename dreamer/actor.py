@@ -84,7 +84,7 @@ class Actor(nn.Module):
         if deterministic:
             action = dist.mean if hasattr(dist, "mean") else dist.probs.argmax(-1)
         else:
-            action = dist.rsample() if hasattr(dist, "rsample") else dist.sample()
+            action = dist.rsample() if getattr(dist, "has_rsample", False) else dist.sample()
 
         log_prob = dist.log_prob(action)
         # Ensure correct shape for multi‑dimensional continuous actions

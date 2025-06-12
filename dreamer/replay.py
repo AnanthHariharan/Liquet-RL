@@ -49,9 +49,10 @@ class ReplayBuffer:
     def __len__(self) -> int:
         return self.capacity if self.full else self.idx
 
-    def ready(self, batch_size: int) -> bool:
-        """Return *True* when the buffer holds enough data for sampling."""
-        return len(self) >= batch_size
+    def ready(self, batch_size: int, seq_len: int) -> bool:
+        """Return *True* when enough transitions are stored for sampling."""
+        buf_len = len(self)
+        return buf_len > seq_len and buf_len >= batch_size
 
     # ------------------------------------------------------------------ #
     #                               Add                                  #
