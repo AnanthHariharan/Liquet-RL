@@ -1,18 +1,3 @@
-"""Simple circular replay buffer that returns contiguous **time‑major**
-sequences suitable for Dreamer‑style training.
-
-The buffer stores (obs, act, rew, done) tuples. `sample()` returns a dict:
-
-    {
-        "obs":  Tensor[seq_len, batch, *obs_shape],
-        "act":  Tensor[seq_len, batch, *act_shape],
-        "rew":  Tensor[seq_len, batch, 1],
-        "done": Tensor[seq_len, batch, 1],
-    }
-
-All tensors live on the device specified at construction time.
-"""
-
 from __future__ import annotations
 
 import random
@@ -49,9 +34,10 @@ class ReplayBuffer:
     def __len__(self) -> int:
         return self.capacity if self.full else self.idx
 
-    def ready(self, batch_size: int) -> bool:
-        """Return *True* when the buffer holds enough data for sampling."""
-        return len(self) >= batch_size
+    def ready(self, batch_size: int, seq_len: int) -> bool:
+        """Return True when the buffer holds enough data for sampling sequences of length seq_len."""
+        # Need at least batch_size entries for batches and seq_len for a full sequence
+        return len(self) >= batch_size and len(self) >= seq_len
 
     # ------------------------------------------------------------------ #
     #                               Add                                  #
@@ -72,42 +58,34 @@ class ReplayBuffer:
     #                              Sample                                #
     # ------------------------------------------------------------------ #
     def _valid_start(self, seq_len: int) -> int:
-        """Return a random start index where the sequence of length `seq_len`
-        does not cross the circular buffer write‑pointer and contains no done=1
-        internally (episode boundary)."""
         max_idx = self.capacity if self.full else self.idx
-        while True:
-            start = random.randint(0, max_idx - seq_len - 1)
-            end = (start + seq_len) % self.capacity
-
-            # sequence must not wrap over the current write index
-            if start < self.idx <= end and not self.full:
-                continue
-            # ensure no terminal flags inside the sequence (except at final step)
-            if self.done[start : start + seq_len - 1].any():
-                continue
-            return start
+        upper = max_idx - seq_len
+        if upper < 0:
+            raise ValueError(f"Not enough entries ({len(self)}) to sample a sequence of length {seq_len}")
+        return random.randint(0, upper)
 
     @torch.no_grad()
     def sample(self, batch_size: int, seq_len: int):
-        """Return a batch of contiguous sequences (time‑major)."""
+        """
+        Return a batch of contiguous sequences (time-major).
+        Handles wrap-around sequences.
+        """
         idxs = [self._valid_start(seq_len) for _ in range(batch_size)]
 
-        obs_batch = torch.stack(
-            [self.obs[i : i + seq_len] for i in idxs], dim=1
-        )  # (seq, batch, *obs)
+        def grab(buf, start):
+            # Handles wrap-around
+            end = start + seq_len
+            if end <= self.capacity:
+                return buf[start:end]
+            else:
+                first = buf[start:self.capacity]
+                second = buf[0:end - self.capacity]
+                return torch.cat([first, second], dim=0)
 
-        act_batch = torch.stack(
-            [self.act[i : i + seq_len] for i in idxs], dim=1
-        )  # (seq, batch, *act)
-
-        rew_batch = torch.stack(
-            [self.rew[i : i + seq_len] for i in idxs], dim=1
-        )  # (seq, batch, 1)
-
-        done_batch = torch.stack(
-            [self.done[i : i + seq_len] for i in idxs], dim=1
-        )  # (seq, batch, 1)
+        obs_batch = torch.stack([grab(self.obs, i) for i in idxs], dim=1)
+        act_batch = torch.stack([grab(self.act, i) for i in idxs], dim=1)
+        rew_batch = torch.stack([grab(self.rew, i) for i in idxs], dim=1)
+        done_batch = torch.stack([grab(self.done, i) for i in idxs], dim=1)
 
         return {
             "obs": obs_batch,

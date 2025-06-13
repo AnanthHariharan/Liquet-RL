@@ -3,11 +3,12 @@ import os
 # Ensure project root is on path to find the `dreamer` package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)))
 import yaml, argparse, random, torch, gymnasium as gym
+from collections import deque
 from pathlib import Path
 from dreamer.model import DreamerModel
 from dreamer.actor import Actor
 from dreamer.critic import Critic, soft_update, hard_update, freeze
-from dreamer.learner import DreamerLearner, symlog, symexp, lambda_return
+from dreamer.learner import DreamerLearner
 from dreamer.replay import ReplayBuffer
 
 # ------------------------------------------------------------------- #
@@ -22,7 +23,7 @@ cfg = {}
 for block in args.configs:
     cfg.update(yaml.safe_load(open("dreamer/configs.yaml"))[block])
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 random.seed(0); torch.manual_seed(0)
 
 # ------------------------------------------------------------------- #
@@ -73,10 +74,12 @@ obs, _ = env.reset()
 h, z = wm.init_state(batch_size=1, device=device)
 prev_act = torch.zeros(1, act_dim, device=device)
 episode_return = 0; step = 0
+# Track returns for early stopping
+rolling_returns = deque(maxlen=100)
 while step < 1_000_000:
     # ----- collect real step ----- #
     obs_t = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
-    h, z, feat = wm.step(obs_t, prev_act, h, z)
+    h, z, feat = wm.step_feature(obs_t, prev_act, h, z)
     action, _, _ = actor(feat, deterministic=False)
     if cfg["action_discrete"]:
         act_idx = int(action.item())
@@ -93,12 +96,18 @@ while step < 1_000_000:
 
     if done or truncated:
         print(f"Episode return {episode_return:.1f}")
+        rolling_returns.append(episode_return)
+        if len(rolling_returns) == 100:
+            mean100 = sum(rolling_returns) / 100.0
+            if mean100 >= 195.0:
+                print(f"Solved CartPole! 100-episode mean = {mean100:.1f}")
+                break
         obs, _ = env.reset(); episode_return = 0
         h, z = wm.init_state(batch_size=1, device=device)
         prev_act.zero_()
 
     # ----- learner updates ----- #
-    if replay.ready(cfg["batch_size"]):
+    if replay.ready(cfg["batch_size"], cfg["seq_len"]):
         for _ in range(cfg["train_ratio"]):
             batch = replay.sample(cfg["batch_size"], cfg["seq_len"])
             metrics = learner.step(batch)

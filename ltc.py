@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
+from typing import Optional
 
 
 class LTCCell(nn.Module):
@@ -24,8 +25,11 @@ class LTCCell(nn.Module):
     def reset_parameters(self) -> None:
         nn.init.xavier_uniform_(self.weight_ih)
         nn.init.orthogonal_(self.weight_hh, gain=0.1)
+        # Reset bias and time constants to defaults
+        nn.init.zeros_(self.bias)
+        nn.init.constant_(self.log_tau, -2.302585)  # ln(0.1)
 
-    def forward(self, x: torch.Tensor, h: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, h: Optional[torch.Tensor] = None) -> torch.Tensor:
         if h is None:
             h = torch.zeros(x.size(0), self.hidden_size, device=x.device, dtype=x.dtype)
 
@@ -36,3 +40,7 @@ class LTCCell(nn.Module):
         # Semi‑implicit Euler update for stability
         h = (h + self.dt * f) / (1.0 + self.dt / tau)
         return h
+
+    def __repr__(self) -> str:
+        return (f"{self.__class__.__name__}(input_size={self.input_size}, "
+                f"hidden_size={self.hidden_size}, dt={self.dt.item():.4f})")

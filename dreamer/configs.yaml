@@ -55,6 +55,7 @@ debug:
 cartpole:
   env_id:            CartPole-v1
   action_discrete:   true
+  train_ratio:       1
   batch_size:        32
   seq_len:           32
   deter_dim:         128

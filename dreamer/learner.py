@@ -152,13 +152,25 @@ class DreamerLearner:
         self.opt_critic.step()
 
         # ---------------- Actor update ---------------- #
-        act_dist = self.actor.dist(feat_img[:-1].detach())
-        action = act_dist.rsample()
-        log_prob = act_dist.log_prob(action)
-        if log_prob.ndim > 2:  # continuous multi‑dim
-            log_prob = log_prob.sum(-1)
-        advantage = (ret_img.detach() - value_pred.detach())
-        actor_loss = -(log_prob * advantage).mean() - 0.01 * act_dist.entropy().mean()
+        feat_actor = feat_img[:-1].detach()
+        if self.actor.discrete:
+            # Gumbel-Softmax reparameterisation for discrete actions
+            logits = self.actor.backbone(feat_actor)
+            action = torch.nn.functional.gumbel_softmax(logits, tau=1.0, hard=True, dim=-1)
+            log_prob = torch.nn.functional.log_softmax(logits, dim=-1)
+            selected_log_prob = (action * log_prob).sum(-1)
+            entropy = -(log_prob.exp() * log_prob).sum(-1)
+            advantage = (ret_img.detach() - value_pred.detach())
+            actor_loss = -(selected_log_prob * advantage).mean() - 0.01 * entropy.mean()
+        else:
+            act_dist = self.actor._dist_cont(self.actor.backbone(feat_actor))
+            action = act_dist.rsample()
+            log_prob = act_dist.log_prob(action)
+            if log_prob.ndim > 2:
+                log_prob = log_prob.sum(-1)
+            entropy = act_dist.entropy()
+            advantage = (ret_img.detach() - value_pred.detach())
+            actor_loss = -(log_prob * advantage).mean() - 0.01 * entropy.mean()
 
         self.opt_actor.zero_grad()
         actor_loss.backward()
