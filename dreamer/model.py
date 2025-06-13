@@ -25,7 +25,7 @@ class RSSM(nn.Module):
         inp_dim = stoch_dim + act_dim
 
         self.ltc = LTCCell(inp_dim, deter_dim, dt)
-        self.prior = MLP(deter_dim, 2 * stoch_dim)     # μ, logσ
+        self.prior = MLP(deter_dim, 2 * stoch_dim)
         self.post = MLP(deter_dim + obs_dim, 2 * stoch_dim)
 
     def _dist(self, stats):
@@ -73,7 +73,7 @@ class RSSM(nn.Module):
 class DreamerModel(nn.Module):
     def __init__(self, obs_dim, act_dim, deter_dim=256, stoch_dim=32):
         super().__init__()
-        self.encoder = MLP(obs_dim, obs_dim * 2)  # identity for low‑dim obs
+        self.encoder = MLP(obs_dim, obs_dim * 2)
         self.rssm = RSSM(obs_dim * 2, act_dim, deter_dim, stoch_dim)
         self.obs_decoder = MLP(deter_dim + stoch_dim, obs_dim)
         self.reward_decoder = MLP(deter_dim + stoch_dim, 1)
