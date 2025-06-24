@@ -1,6 +1,5 @@
 import sys
 import os
-# Ensure project root is on path to find the `dreamer` package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)))
 import yaml, argparse, random, torch, gymnasium as gym
 from collections import deque
